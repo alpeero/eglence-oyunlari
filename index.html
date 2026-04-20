@@ -618,18 +618,24 @@ const balonLevelCfg=[
 ];
 const MAX_BALON_LEVEL=7;
 let balonLevel=1,balonQ=0,balonCorrect=0,balonAnswer=0,balonA=0,balonB=0,balonAnim=null,balonBalloons=[];
+let balonUsedPairs=new Set(); // aynı seviyede tekrar önleme
 function initBalon(level){
   if(level===undefined){level=1;balonCorrect=0}
-  balonLevel=level;balonQ=0;balonCorrect=0;
+  balonLevel=level;balonQ=0;balonCorrect=0;balonUsedPairs=new Set();
   document.getElementById('balon-score').textContent=balonLevelCfg[level-1].label;
   newBalonQuestion();
 }
 function stopBalon(){if(balonAnim){clearInterval(balonAnim);balonAnim=null}}
 function makeBalonQuestion(){
   const cfg=balonLevelCfg[balonLevel-1];
-  // a ve b'yi maxSum'u geçmeyecek şekilde üret
-  let a,b;
-  do{a=R(1,cfg.maxSum-1);b=R(1,cfg.maxSum-1);}while(a+b>cfg.maxSum||a+b<2);
+  let a,b,key,attempts=0;
+  do{
+    a=R(1,cfg.maxSum-1);b=R(1,cfg.maxSum-1);
+    key=Math.min(a,b)+','+Math.max(a,b); // sırasız çift
+    attempts++;
+    if(attempts>80){balonUsedPairs.clear();} // tüm kombinasyonlar bitti, sıfırla
+  }while(a+b>cfg.maxSum||a+b<2||balonUsedPairs.has(key));
+  balonUsedPairs.add(key);
   return{a,b,ans:a+b};
 }
 function newBalonQuestion(){
@@ -934,13 +940,16 @@ function uzayLoop(){
 
 // ===== 9. ZOMBİ AVCI =====
 const ZOMBI_LEVELS=[
-  {emoji:'🧟',name:'Zombi Ormanı',  killsToNext:8,  speed:1.0, bossEmoji:'🧟‍♂️', bossHp:4, skyTop:'#1a3a1a', skyBot:'#2d5a27', groundColor:'#1a5c2a', groundEdge:'#27ae60'},
-  {emoji:'👻',name:'Hayalet Köyü',  killsToNext:10, speed:1.3, bossEmoji:'👻',   bossHp:5, skyTop:'#1a1a2e', skyBot:'#2c3e50', groundColor:'#2c2c4e', groundEdge:'#5d5d8a'},
-  {emoji:'🤡',name:'Palyaço Sirki', killsToNext:12, speed:1.6, bossEmoji:'🤡',   bossHp:6, skyTop:'#3a0808', skyBot:'#6c1010', groundColor:'#5a1a1a', groundEdge:'#c0392b'},
-  {emoji:'👾',name:'Uzay İstilası', killsToNext:15, speed:1.9, bossEmoji:'👾',   bossHp:8, skyTop:'#000010', skyBot:'#0a0a2e', groundColor:'#0a0a1e', groundEdge:'#2980b9'},
+  {emoji:'🧟',name:'Zombi Ormanı',   killsToNext:8,  speed:1.0, bossEmoji:'🧟‍♂️',bossHp:4, skyTop:'#1a3a1a',skyBot:'#2d5a27',groundColor:'#1a5c2a',groundEdge:'#27ae60', dualBoss:false},
+  {emoji:'👻',name:'Hayalet Köyü',   killsToNext:10, speed:1.3, bossEmoji:'👻',  bossHp:5, skyTop:'#1a1a2e',skyBot:'#2c3e50',groundColor:'#2c2c4e',groundEdge:'#5d5d8a', dualBoss:false},
+  {emoji:'🤡',name:'Palyaço Sirki',  killsToNext:12, speed:1.6, bossEmoji:'🤡',  bossHp:6, skyTop:'#3a0808',skyBot:'#6c1010',groundColor:'#5a1a1a',groundEdge:'#c0392b', dualBoss:false},
+  {emoji:'👾',name:'Uzay İstilası',  killsToNext:15, speed:1.9, bossEmoji:'👾',  bossHp:8, skyTop:'#000010',skyBot:'#0a0a2e',groundColor:'#0a0a1e',groundEdge:'#2980b9', dualBoss:false},
+  {emoji:'🧌',name:'Dev Ormanı',     killsToNext:15, speed:2.2, bossEmoji:'🧌',  bossHp:9, skyTop:'#0d1f0d',skyBot:'#1a3a1a',groundColor:'#0d2b0d',groundEdge:'#1e8449', dualBoss:false},
+  {emoji:'💀',name:'Kafatası Adası', killsToNext:18, speed:2.5, bossEmoji:'💀',  bossHp:10,skyTop:'#1a0a00',skyBot:'#3d1000',groundColor:'#2d1000',groundEdge:'#c0392b', dualBoss:false},
+  {emoji:'🔥',name:'Cehennem',       killsToNext:20, speed:2.9, bossEmoji:'😈',  bossHp:12,skyTop:'#1a0000',skyBot:'#4d0000',groundColor:'#3d0000',groundEdge:'#e74c3c', dualBoss:true},
 ];
 let zombiCanvas,zombiCtx,zombiAF,zombiScore=0,zombiLives=3,zombiFrame=0;
-let zombiList=[],bombList=[],zombiLevel=0,zombiKills=0,zombiBossActive=false,zombiBoss=null,zombiDone=false;
+let zombiList=[],bombList=[],zombiLevel=0,zombiKills=0,zombiBossActive=false,zombiBoss=null,zombiBoss2=null,zombiDone=false;
 
 function initZombi(level){
   zombiLevel=level||0;
@@ -950,7 +959,7 @@ function initZombi(level){
   zombiCanvas.height=Math.min(window.innerHeight-160,340);
   zombiCtx=zombiCanvas.getContext('2d');
   if(!level){zombiScore=0;zombiLives=3;}
-  zombiFrame=0;zombiList=[];bombList=[];zombiKills=0;zombiBossActive=false;zombiBoss=null;zombiDone=false;
+  zombiFrame=0;zombiList=[];bombList=[];zombiKills=0;zombiBossActive=false;zombiBoss=null;zombiBoss2=null;zombiDone=false;
   document.getElementById('zombi-score').textContent=zombiScore+' puan';
   document.getElementById('zombi-fire-btn').onclick=zombiFireBomb;
   document.onkeydown=function(e){if(curGame!=='zombi')return;if(e.key===' '||e.key==='ArrowUp')zombiFireBomb()};
@@ -1007,6 +1016,10 @@ function zombiLoop(){
   if(!zombiBossActive&&!zombiDone&&zombiKills>=cfg.killsToNext){
     zombiList=[];zombiBossActive=true;
     zombiBoss={x:W+80,y:ground,alive:true,hp:cfg.bossHp,maxHp:cfg.bossHp,emoji:cfg.bossEmoji};
+    if(cfg.dualBoss){
+      // İkinci boss biraz arkadan gelsin
+      zombiBoss2={x:W+200,y:ground,alive:true,hp:cfg.bossHp,maxHp:cfg.bossHp,emoji:cfg.bossEmoji};
+    }
     tone(150,.4,'sawtooth');setTimeout(()=>tone(120,.4,'sawtooth'),250);setTimeout(()=>tone(100,.6,'sawtooth'),500);
   }
 
@@ -1030,6 +1043,10 @@ function zombiLoop(){
     zombiBoss.x-=cfg.speed*0.45;
     if(zombiBoss.x<55){zombiBoss.alive=false;zombiLives-=2;sndNo();tone(100,.5,'sawtooth');if(zombiLives<=0)zombiGameOver();}
   }
+  if(zombiBossActive&&zombiBoss2&&zombiBoss2.alive){
+    zombiBoss2.x-=cfg.speed*0.45;
+    if(zombiBoss2.x<55){zombiBoss2.alive=false;zombiLives-=2;sndNo();tone(100,.5,'sawtooth');if(zombiLives<=0)zombiGameOver();}
+  }
 
   // Bomba fiziği
   bombList.forEach(b=>{
@@ -1045,12 +1062,21 @@ function zombiLoop(){
       });
       if(zombiBossActive&&zombiBoss&&zombiBoss.alive&&Math.abs(zombiBoss.x-b.x)<rad+25){
         zombiBoss.hp--;tone(500,.08);
-        if(zombiBoss.hp<=0){
-          zombiBoss.alive=false;zombiBossActive=false;
-          zombiScore+=5;document.getElementById('zombi-score').textContent=zombiScore+' puan';
-          saveScore('zombi',zombiScore);
-          setTimeout(()=>zombiNextLevel(),1000);
-        }
+        if(zombiBoss.hp<=0){zombiBoss.alive=false;}
+      }
+      if(zombiBossActive&&zombiBoss2&&zombiBoss2.alive&&Math.abs(zombiBoss2.x-b.x)<rad+25){
+        zombiBoss2.hp--;tone(500,.08);
+        if(zombiBoss2.hp<=0){zombiBoss2.alive=false;}
+      }
+      // İki boss da öldü mü?
+      const boss1Dead=!zombiBoss||!zombiBoss.alive;
+      const boss2Dead=!zombiBoss2||!zombiBoss2.alive;
+      if(zombiBossActive&&boss1Dead&&boss2Dead){
+        zombiBossActive=false;
+        zombiScore+=cfg.dualBoss?15:5;
+        document.getElementById('zombi-score').textContent=zombiScore+' puan';
+        saveScore('zombi',zombiScore);
+        setTimeout(()=>zombiNextLevel(),1000);
       }
     }
   });
@@ -1096,12 +1122,11 @@ function zombiLoop(){
     c.font='30px serif';c.fillText(z.emoji,z.x,ground+8+wobble);
   });
 
-  // BOSS
+  // BOSS 1
   if(zombiBossActive&&zombiBoss&&zombiBoss.alive){
     const bx=zombiBoss.x,bounce=Math.sin(zombiFrame*0.1)*6;
     c.fillStyle='rgba(0,0,0,0.35)';c.beginPath();c.ellipse(bx,ground+5,34,9,0,0,Math.PI*2);c.fill();
     c.font='60px serif';c.textAlign='center';c.textBaseline='bottom';c.fillText(zombiBoss.emoji,bx,ground+10+bounce);
-    // HP bar
     const bw=74,bh=9,bx2=bx-37,by=ground-85;
     c.fillStyle='rgba(0,0,0,0.55)';c.fillRect(bx2,by,bw,bh);
     const r=zombiBoss.hp/zombiBoss.maxHp;
@@ -1110,6 +1135,20 @@ function zombiLoop(){
     c.strokeStyle='#fff';c.lineWidth=1.5;c.strokeRect(bx2,by,bw,bh);
     c.font='bold 12px Nunito,sans-serif';c.fillStyle='#fff';c.textAlign='center';c.textBaseline='bottom';
     c.shadowColor='#000';c.shadowBlur=3;c.fillText('👑 BOSS',bx,by-1);c.shadowBlur=0;
+  }
+  // BOSS 2 (çift boss seviyesi)
+  if(zombiBossActive&&zombiBoss2&&zombiBoss2.alive){
+    const bx=zombiBoss2.x,bounce=Math.sin(zombiFrame*0.1+1)*6;
+    c.fillStyle='rgba(0,0,0,0.35)';c.beginPath();c.ellipse(bx,ground+5,34,9,0,0,Math.PI*2);c.fill();
+    c.font='60px serif';c.textAlign='center';c.textBaseline='bottom';c.fillText(zombiBoss2.emoji,bx,ground+10+bounce);
+    const bw=74,bh=9,bx2=bx-37,by=ground-85;
+    c.fillStyle='rgba(0,0,0,0.55)';c.fillRect(bx2,by,bw,bh);
+    const r2=zombiBoss2.hp/zombiBoss2.maxHp;
+    c.fillStyle=r2>0.5?'#2ecc71':r2>0.25?'#f39c12':'#e74c3c';
+    c.fillRect(bx2,by,bw*r2,bh);
+    c.strokeStyle='#fff';c.lineWidth=1.5;c.strokeRect(bx2,by,bw,bh);
+    c.font='bold 12px Nunito,sans-serif';c.fillStyle='#ffd700';c.textAlign='center';c.textBaseline='bottom';
+    c.shadowColor='#000';c.shadowBlur=3;c.fillText('👑 BOSS 2',bx,by-1);c.shadowBlur=0;
   }
 
   // Bombalar
@@ -1145,9 +1184,13 @@ function zombiLoop(){
 // ===== 10. BALIK AVCI =====
 // Seviyeler: her seviyede farklı su & balık tipleri, sonda dev boss balık
 const BALIK_LEVELS=[
-  {name:'Göl',      skyTop:'#87ceeb',skyBot:'#4a90d9',waterTop:'#1a6ea8',waterBot:'#0d3d6b',fishTypes:[{e:'🐟',pts:1,spd:1.2},{e:'🐠',pts:2,spd:1.8}],                    fishToNext:6, bossEmoji:'🐡',bossHp:4,bossW:70},
-  {name:'Deniz',    skyTop:'#ff9966',skyBot:'#e05c1a',waterTop:'#0077b6',waterBot:'#023e8a',fishTypes:[{e:'🐟',pts:1,spd:1.4},{e:'🐠',pts:2,spd:2.0},{e:'🦈',pts:3,spd:2.6}], fishToNext:8, bossEmoji:'🦈',bossHp:5,bossW:80},
-  {name:'Okyanus',  skyTop:'#0f0c29',skyBot:'#302b63',waterTop:'#03045e',waterBot:'#00060f',fishTypes:[{e:'🐙',pts:2,spd:1.6},{e:'🦑',pts:3,spd:2.2},{e:'🐋',pts:4,spd:1.0}], fishToNext:10,bossEmoji:'🐋',bossHp:7,bossW:100},
+  {name:'Göl',        skyTop:'#87ceeb',skyBot:'#4a90d9',waterTop:'#1a6ea8',waterBot:'#0d3d6b',fishTypes:[{e:'🐟',pts:1,spd:1.2},{e:'🐠',pts:2,spd:1.8}],                          fishToNext:6,  bossEmoji:'🐡',bossHp:4, bossW:70},
+  {name:'Deniz',      skyTop:'#ff9966',skyBot:'#e05c1a',waterTop:'#0077b6',waterBot:'#023e8a',fishTypes:[{e:'🐟',pts:1,spd:1.4},{e:'🐠',pts:2,spd:2.0},{e:'🦈',pts:3,spd:2.6}],  fishToNext:8,  bossEmoji:'🦈',bossHp:5, bossW:80},
+  {name:'Okyanus',    skyTop:'#0f0c29',skyBot:'#302b63',waterTop:'#03045e',waterBot:'#00060f',fishTypes:[{e:'🐙',pts:2,spd:1.6},{e:'🦑',pts:3,spd:2.2},{e:'🐋',pts:4,spd:1.0}],  fishToNext:10, bossEmoji:'🐋',bossHp:7, bossW:100},
+  {name:'Buzul Gölü', skyTop:'#cce8f4',skyBot:'#a0d0e8',waterTop:'#4a9fc0',waterBot:'#1a5f80',fishTypes:[{e:'🐟',pts:2,spd:1.8},{e:'🦭',pts:3,spd:1.4},{e:'🐧',pts:4,spd:2.0}], fishToNext:12, bossEmoji:'🦭',bossHp:8, bossW:90},
+  {name:'Volkan Adası',skyTop:'#ff4500',skyBot:'#8b0000',waterTop:'#8b0000',waterBot:'#3d0000',fishTypes:[{e:'🐟',pts:2,spd:2.0},{e:'🦈',pts:3,spd:2.8},{e:'🐊',pts:5,spd:1.6}], fishToNext:14, bossEmoji:'🐊',bossHp:10,bossW:110},
+  {name:'Derin Deniz', skyTop:'#000a1a',skyBot:'#001a33',waterTop:'#001433',waterBot:'#000510',fishTypes:[{e:'🐙',pts:3,spd:2.2},{e:'🦑',pts:4,spd:2.6},{e:'🐡',pts:5,spd:3.0}], fishToNext:16, bossEmoji:'🦑',bossHp:12,bossW:110},
+  {name:'Efsane Okyanus',skyTop:'#090024',skyBot:'#1a0050',waterTop:'#0a003d',waterBot:'#000020',fishTypes:[{e:'🐙',pts:4,spd:2.4},{e:'🦈',pts:5,spd:3.0},{e:'🐋',pts:6,spd:1.8}],fishToNext:20, bossEmoji:'🐲',bossHp:15,bossW:120},
 ];
 
 let balikCanvas,balikCtx,balikAF,balikScore=0,balikLevel=0,balikFrame=0;
@@ -1220,7 +1263,7 @@ function balikNextLevel(){
   if(next>=BALIK_LEVELS.length){
     saveScore('balik',balikScore);confetti();
     const ov=document.createElement('div');ov.className='lc';
-    ov.innerHTML=`<h2>Efsane Balıkçı! 🏆</h2><div class="sb">${balikScore} Puan</div><p>Tüm seviyeleri geçtin!</p><button id="bl-wr">Tekrar</button><button id="bl-wm">Menu</button>`;
+    ov.innerHTML=`<h2>Efsane Balıkçı! 🏆</h2><div class="sb">${balikScore} Puan</div><p>Tüm 7 seviyeyi geçtin!</p><button id="bl-wr">Tekrar</button><button id="bl-wm">Menu</button>`;
     document.body.appendChild(ov);
     ov.querySelector('#bl-wr').onclick=()=>{ov.remove();initBalik()};
     ov.querySelector('#bl-wm').onclick=()=>{ov.remove();goMenu()};
